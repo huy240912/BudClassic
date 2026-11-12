@@ -29,6 +29,10 @@ jobs:
       - name: Install Android workload
         run: dotnet workload install android
 
+      - name: Fix missing C# namespace
+        run: |
+          sed -i '1i using System;' source/GalaxyBudsClient-master/GalaxyBudsClient.Android/MainActivity.cs
+
       - name: Build Android APK (test)
         working-directory: source/GalaxyBudsClient-master
         run: |
