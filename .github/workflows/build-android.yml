@@ -1,0 +1,46 @@
+
+name: Build Android APK from ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract source archive
+        run: |
+          test -f BudsClassic-prototype-source.zip
+          mkdir -p source
+          unzip -q BudsClassic-prototype-source.zip -d source
+          test -f source/GalaxyBudsClient-master/GalaxyBudsClient.Android/GalaxyBudsClient.Android.csproj
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.300'
+
+      - name: Install Android workload
+        run: dotnet workload install android
+
+      - name: Build Android APK (test)
+        working-directory: source/GalaxyBudsClient-master
+        run: |
+          dotnet publish GalaxyBudsClient.Android/GalaxyBudsClient.Android.csproj \
+            -c Release -f net10.0-android36.1 -r android-arm64 \
+            -p:AndroidPackageFormats=apk \
+            -p:AndroidKeyStore=false \
+            -o "$GITHUB_WORKSPACE/apk-output"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-test-APK
+          path: apk-output/**/*.apk
+          if-no-files-found: error
