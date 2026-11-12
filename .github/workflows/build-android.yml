@@ -1,27 +1,36 @@
 
-name: Build Android APK from ZIP
+name: Buds Classic Android Build
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths:
+      - 'BudsClassic-prototype-source.zip'
+      - '.github/workflows/build-android.yml'
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract source archive
+      - name: Check and extract ZIP
+        shell: bash
         run: |
-          test -f BudsClassic-prototype-source.zip
+          ZIP="BudsClassic-prototype-source.zip"
+          if [ ! -f "$ZIP" ]; then
+            echo "::error::Missing $ZIP"
+            exit 1
+          fi
           mkdir -p source
-          unzip -q BudsClassic-prototype-source.zip -d source
-          test -f source/GalaxyBudsClient-master/GalaxyBudsClient.Android/GalaxyBudsClient.Android.csproj
+          unzip -q "$ZIP" -d source
+          find source -name "*.csproj"
 
-      - name: Install .NET 10 SDK
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.300'
@@ -29,22 +38,43 @@ jobs:
       - name: Install Android workload
         run: dotnet workload install android
 
-      - name: Fix missing C# namespace
+      - name: Fix C# namespace
+        shell: bash
         run: |
-          sed -i '1i using System;' source/GalaxyBudsClient-master/GalaxyBudsClient.Android/MainActivity.cs
+          FILE=$(find source -path '*/GalaxyBudsClient.Android/MainActivity.cs' -print -quit)
+          if [ -z "$FILE" ]; then
+            echo "::error::MainActivity.cs not found"
+            exit 1
+          fi
+          sed -i '1i using System;' "$FILE"
 
-      - name: Build Android APK (test)
-        working-directory: source/GalaxyBudsClient-master
+      - name: Find Android project
+        shell: bash
         run: |
-          dotnet publish GalaxyBudsClient.Android/GalaxyBudsClient.Android.csproj \
-            -c Release -f net10.0-android36.1 -r android-arm64 \
+          PROJECT=$(find source -name 'GalaxyBudsClient.Android.csproj' -print -quit)
+          if [ -z "$PROJECT" ]; then
+            echo "::error::Android project not found"
+            exit 1
+          fi
+          echo "ANDROID_PROJECT=$PROJECT" >> "$GITHUB_ENV"
+
+      - name: Build signed APK
+        shell: bash
+        run: |
+          dotnet publish "$ANDROID_PROJECT" \
+            -c Release \
+            -f net10.0-android36.1 \
+            -r android-arm64 \
             -p:AndroidPackageFormats=apk \
             -p:AndroidKeyStore=false \
             -o "$GITHUB_WORKSPACE/apk-output"
 
+      - name: Show APK files
+        run: find apk-output -name "*.apk" -type f
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Android-test-APK
+          name: BudsClassic-Android
           path: apk-output/**/*.apk
           if-no-files-found: error
