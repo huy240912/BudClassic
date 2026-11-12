@@ -62,6 +62,8 @@ jobs:
         shell: bash
         run: |
           dotnet publish "$ANDROID_PROJECT" \
+  -m:1 \
+  -p:BuildInParallel=false \
             -c Release \
             -f net10.0-android36.1 \
             -r android-arm64 \
